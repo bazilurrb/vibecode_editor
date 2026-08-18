@@ -58,7 +58,7 @@ interface ProjectTableProps {
   projects: Project[];
   onUpdateProject?: Function;
   onDeleteProject?: Function;
-  onDuplicateProject?:Function;
+  onDuplicateProject?: Function;
   onMarkasFavorite?: Function;
 }
 
@@ -173,7 +173,7 @@ export default function ProjectTable({
   };
 
 
-    return (
+  return (
     <>
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -225,77 +225,145 @@ export default function ProjectTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open menu</span>
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem
+                      // render={
+                      // <MarkedToggleButton markedForRevision={project.Starmark[0]?.isMarked} id={project.id}
+                      // />
+                      // }
+                      />
+                      <DropdownMenuItem
                         render={
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                            </Button>
+                          <Link
+                            href={`/playground/${project.id}`}
+                            className="flex items-center"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            Open Project
+                          </Link>
                         }
-                        />
-                        <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                            // render={
-                            // <MarkedToggleButton markedForRevision={project.Starmark[0]?.isMarked} id={project.id}
-                            // />
-                            // }
-                        />
-                        <DropdownMenuItem
-                            render={
-                            <Link
-                                href={`/playground/${project.id}`}
-                                className="flex items-center"
-                            >
-                                <Eye className="h-4 w-4 mr-2" />
-                                Open Project
-                            </Link>
-                            }
-                        />
-                        <DropdownMenuItem
-                            render={
-                            <Link
-                                href={`/playground/${project.id}`}
-                                target="_blank"
-                                className="flex items-center"
-                            >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Open in New Tab
-                            </Link>
-                            }
-                        />
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleEditClick(project)}>
-                            <Edit3 className="h-4 w-4 mr-2" />
-                            Edit Project
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicateProject(project)}>
-                            <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => copyProjectUrl(project.id)}>
-                            <Download className="h-4 w-4 mr-2" />
-                            Copy URL
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => handleDeleteClick(project)}
-                            className="text-destructive focus:text-destructive"
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Project
-                        </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    </TableCell>
+                      />
+                      <DropdownMenuItem
+                        render={
+                          <Link
+                            href={`/playground/${project.id}`}
+                            target="_blank"
+                            className="flex items-center"
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Open in New Tab
+                          </Link>
+                        }
+                      />
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleEditClick(project)}>
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        Edit Project
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDuplicateProject(project)}>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => copyProjectUrl(project.id)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Copy URL
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleDeleteClick(project)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Project
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
 
             ))}
           </TableBody>
-
-
         </Table>
       </div>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Make changes to your Project details here. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Project Title</Label>
+              <Input
+                id="title"
+                value={editData.title}
+                onChange={(e) => 
+                  setEditData((prev)=> ({ ...prev, title: e.target.value }))
+                }
+                placeholder="Enter Project Title"/>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={editData.description}
+                onChange={(e) => 
+                  setEditData((prev)=> ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Enter Project Description"
+                />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant={"outline"} onClick={()=>setEditDialogOpen(false)} disabled= {isLoading}>
+              Cancel
+            </Button>
+            <Button type="button" variant={"brand"} onClick={handleUpdateProject}>
+              {
+                isLoading ? "Saving..." : "Save Changes"
+              }
+            </Button>
+          </DialogFooter>
+
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedProject?.title}"? This
+              action cannot be undone. All files and data associated with this
+              project will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              disabled={isLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isLoading ? "Deleting..." : "Delete Project"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
