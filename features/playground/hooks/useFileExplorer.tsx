@@ -84,12 +84,20 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
   setActiveFileId: (fileId) => set({ activeFileId: fileId }),
 
   openFile: (file) => {
-    const fileId = generateFileId(file, get().templateData!);
+    const templateData = get().templateData;
+    const fileId = generateFileId(file, templateData!);
     const { openFiles } = get();
     const existingFile = openFiles.find((f) => f.id === fileId);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c5b92'},body:JSON.stringify({sessionId:'0c5b92',location:'useFileExplorer.tsx:openFile',message:'openFile called',data:{filename:file.filename,extension:file.fileExtension,contentLength:(file.content||'').length,contentPreview:(file.content||'').slice(0,80),hasTemplateData:!!templateData,fileId,existingFile:!!existingFile},timestamp:Date.now(),hypothesisId:'B,D'})}).catch(()=>{});
+    // #endregion
+
     if (existingFile) {
       set({ activeFileId: fileId, editorContent: existingFile.content });
+      // #region agent log
+      fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c5b92'},body:JSON.stringify({sessionId:'0c5b92',location:'useFileExplorer.tsx:openFile:existing',message:'switched to existing file',data:{fileId,editorContentLength:existingFile.content.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       return;
     }
 
@@ -106,6 +114,10 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
       activeFileId: fileId,
       editorContent: file.content || "",
     }));
+
+    // #region agent log
+    fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c5b92'},body:JSON.stringify({sessionId:'0c5b92',location:'useFileExplorer.tsx:openFile:new',message:'opened new file',data:{fileId,editorContentLength:(file.content||'').length,openFilesCount:get().openFiles.length+1},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
   },
 
   closeFile: (fileId) => {

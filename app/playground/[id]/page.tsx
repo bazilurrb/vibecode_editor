@@ -20,6 +20,8 @@ import { Save, Bot, Settings, FileText, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TemplateFile } from "@/features/playground/types";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import PlaygroundEditor from "@/features/playground/components/playground-editor";
 
 const Page = () => {
     const { id } = useParams<{ id: string }>();
@@ -45,32 +47,49 @@ const Page = () => {
         setOpenFiles,
     } = useFileExplorer();
 
-    useEffect(()=>{
+    useEffect(() => {
         setPlaygroundId(id);
     }, [id, setPlaygroundId])
-    
-    useEffect(()=>{
-        if(templateData && !openFiles.length){
+
+    useEffect(() => {
+        if (templateData && !openFiles.length) {
             setTemplateData(templateData);
         }
-    },[templateData, setTemplateData, openFiles.length])
+    }, [templateData, setTemplateData, openFiles.length])
 
     const activeFile = openFiles.find((f) => f.id === activeFileId);
     const hasUnsavedChanges = openFiles.some((f) => f.hasUnsavedChanges);
     // f = file
 
+    useEffect(() => {
+        if (openFiles.length === 0) return;
+        // #region agent log
+        fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c5b92' }, body: JSON.stringify({ sessionId: '0c5b92', location: 'page.tsx:render-state', message: 'editor render state', data: { activeFileId, editorContentLength: editorContent.length, editorContentPreview: editorContent.slice(0, 80), openFilesCount: openFiles.length, activeFileName: activeFile ? `${activeFile.filename}.${activeFile.fileExtension}` : null, hasEditorUI: false }, timestamp: Date.now(), hypothesisId: 'A,C' }) }).catch(() => { });
+        // #endregion
+    }, [openFiles.length, activeFileId, editorContent, activeFile]);
+
     const handleFileSelect = (file: TemplateFile) => {
-        console.log("HandlePath", file)
+        // #region agent log
+        fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c5b92' }, body: JSON.stringify({ sessionId: '0c5b92', location: 'page.tsx:handleFileSelect', message: 'file selected from tree', data: { filename: file.filename, extension: file.fileExtension, contentLength: (file.content || '').length }, timestamp: Date.now(), hypothesisId: 'B' }) }).catch(() => { });
+        // #endregion
         openFile(file);
+    }
+
+    const handleTabChange = (fileId: string) => {
+        setActiveFileId(fileId);
+        const file = openFiles.find((f) => f.id === fileId);
+        // #region agent log
+        fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c5b92' }, body: JSON.stringify({ sessionId: '0c5b92', location: 'page.tsx:handleTabChange', message: 'tab changed', data: { fileId, fileFound: !!file, fileContentLength: file?.content?.length ?? 0, editorContentLength: editorContent.length }, timestamp: Date.now(), hypothesisId: 'C' }) }).catch(() => { });
+        // #endregion
     }
 
     return (
         <TooltipProvider>
             <>
 
-                <TemplateFileTree data={templateData!} 
-                onFileSelect={handleFileSelect} 
-                selectedFile={activeFile} />
+                <TemplateFileTree data={templateData!}
+                    onFileSelect={handleFileSelect}
+                    selectedFile={activeFile} />
 
                 {/* TODO: TEMPLATE TREE */}
                 <SidebarInset>
@@ -177,7 +196,7 @@ const Page = () => {
                                 <div className="border-b bg-muted/30">
                                     <Tabs
                                         value={activeFileId || ""}
-                                        onValueChange={setActiveFileId}
+                                        onValueChange={handleTabChange}
                                     >
                                         <div className="flex items-center justify-between px-4 py-2">
                                             <TabsList className="h-8 bg-transparent p-0">
@@ -221,6 +240,37 @@ const Page = () => {
                                             )}
                                         </div>
                                     </Tabs>
+                                </div>
+
+                                <div className="flex-1">
+                                    <ResizablePanelGroup
+                                        orientation="horizontal"
+                                        className="h-full"
+                                    >
+                                        <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
+                                            <PlaygroundEditor
+                                                activeFile={activeFile}
+                                                content={activeFile?.content || ""}
+                                                onContentChange={(value) =>
+                                                    activeFileId && updateFileContent(activeFileId, value)
+                                                }
+                                                // suggestion={aiSuggestions.suggestion}
+                                                // suggestionLoading={aiSuggestions.isLoading}
+                                                // suggestionPosition={aiSuggestions.position}
+                                                // onAcceptSuggestion={(editor, monaco) =>
+                                                //     aiSuggestions.acceptSuggestion(editor, monaco)
+                                                // }
+                                                // onRejectSuggestion={(editor) =>
+                                                //     aiSuggestions.rejectSuggestion(editor)
+                                                // }
+                                                // onTriggerSuggestion={(type, editor) =>
+                                                //     aiSuggestions.fetchSuggestion(type, editor)
+                                                // }
+                                            />
+                                        </ResizablePanel>
+
+                                        
+                                    </ResizablePanelGroup>
                                 </div>
 
 
