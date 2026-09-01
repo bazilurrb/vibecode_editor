@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { usePlayground } from "@/features/playground/hooks/usePlayground";
 import TemplateFileTree from "@/features/playground/components/template-file-tree";
 import { Button } from "@/components/ui/button";
+import WebContainerPreview from "@/features/webContainers/components/webcontainer-preview";
 
 import {
     Tooltip,
@@ -16,12 +17,15 @@ import {
     TooltipProvider
 } from "@/components/ui/tooltip";
 
-import { Save, Bot, Settings, FileText, X } from "lucide-react";
+import { Save, Bot, Settings, FileText, X, AlertCircle, FolderOpen } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TemplateFile } from "@/features/playground/types";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import PlaygroundEditor from "@/features/playground/components/playground-editor";
+import { useWebContainer } from "@/features/webContainers/hooks/useWebContainer";
+import LoadingStep from "@/components/ui/loader";
+
 
 const Page = () => {
     const { id } = useParams<{ id: string }>();
@@ -47,6 +51,15 @@ const Page = () => {
         setOpenFiles,
     } = useFileExplorer();
 
+    const {
+        serverUrl,
+        isLoading: containerLoading,
+        error: containerError,
+        instance,
+        writeFileSync,
+        // @ts-ignore
+    } = useWebContainer({ templateData });
+
     useEffect(() => {
         setPlaygroundId(id);
     }, [id, setPlaygroundId])
@@ -68,6 +81,14 @@ const Page = () => {
         // #endregion
     }, [openFiles.length, activeFileId, editorContent, activeFile]);
 
+    const handleTabChange = (fileId: string) => {
+        setActiveFileId(fileId);
+        const file = openFiles.find((f) => f.id === fileId);
+        // #region agent log
+        fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c5b92' }, body: JSON.stringify({ sessionId: '0c5b92', location: 'page.tsx:handleTabChange', message: 'tab changed', data: { fileId, fileFound: !!file, fileContentLength: file?.content?.length ?? 0, editorContentLength: editorContent.length }, timestamp: Date.now(), hypothesisId: 'C' }) }).catch(() => { });
+        // #endregion
+    }
+
     const handleFileSelect = (file: TemplateFile) => {
         // #region agent log
         fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c5b92' }, body: JSON.stringify({ sessionId: '0c5b92', location: 'page.tsx:handleFileSelect', message: 'file selected from tree', data: { filename: file.filename, extension: file.fileExtension, contentLength: (file.content || '').length }, timestamp: Date.now(), hypothesisId: 'B' }) }).catch(() => { });
@@ -75,12 +96,59 @@ const Page = () => {
         openFile(file);
     }
 
-    const handleTabChange = (fileId: string) => {
-        setActiveFileId(fileId);
-        const file = openFiles.find((f) => f.id === fileId);
-        // #region agent log
-        fetch('http://127.0.0.1:7302/ingest/649621eb-5f46-45f2-97c4-4c29651dd686', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c5b92' }, body: JSON.stringify({ sessionId: '0c5b92', location: 'page.tsx:handleTabChange', message: 'tab changed', data: { fileId, fileFound: !!file, fileContentLength: file?.content?.length ?? 0, editorContentLength: editorContent.length }, timestamp: Date.now(), hypothesisId: 'C' }) }).catch(() => { });
-        // #endregion
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
+                <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+                <h2 className="text-xl font-semibold text-red-600 mb-2">
+                    Something went wrong
+                </h2>
+                <p className="text-gray-600 mb-4">{error}</p>
+                <Button onClick={() => window.location.reload()} variant="destructive">
+                    Try Again
+                </Button>
+            </div>
+        );
+    }
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
+                <div className="w-full max-w-md p-6 rounded-lg shadow-sm border">
+                    <h2 className="text-xl font-semibold mb-6 text-center">
+                        Loading Playground
+                    </h2>
+                    <div className="mb-8">
+                        <LoadingStep
+                            currentStep={1}
+                            step={1}
+                            label="Loading playground data"
+                        />
+                        <LoadingStep
+                            currentStep={2}
+                            step={2}
+                            label="Setting up environment"
+                        />
+                        <LoadingStep currentStep={3} step={3} label="Ready to code" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    // No template data
+    if (!templateData) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
+                <FolderOpen className="h-12 w-12 text-amber-500 mb-4" />
+                <h2 className="text-xl font-semibold text-amber-600 mb-2">
+                    No template data available
+                </h2>
+                <Button onClick={() => window.location.reload()} variant="outline">
+                    Reload Template
+                </Button>
+            </div>
+        );
     }
 
     return (
@@ -254,22 +322,37 @@ const Page = () => {
                                                 onContentChange={(value) =>
                                                     activeFileId && updateFileContent(activeFileId, value)
                                                 }
-                                                // suggestion={aiSuggestions.suggestion}
-                                                // suggestionLoading={aiSuggestions.isLoading}
-                                                // suggestionPosition={aiSuggestions.position}
-                                                // onAcceptSuggestion={(editor, monaco) =>
-                                                //     aiSuggestions.acceptSuggestion(editor, monaco)
-                                                // }
-                                                // onRejectSuggestion={(editor) =>
-                                                //     aiSuggestions.rejectSuggestion(editor)
-                                                // }
-                                                // onTriggerSuggestion={(type, editor) =>
-                                                //     aiSuggestions.fetchSuggestion(type, editor)
-                                                // }
+                                            // suggestion={aiSuggestions.suggestion}
+                                            // suggestionLoading={aiSuggestions.isLoading}
+                                            // suggestionPosition={aiSuggestions.position}
+                                            // onAcceptSuggestion={(editor, monaco) =>
+                                            //     aiSuggestions.acceptSuggestion(editor, monaco)
+                                            // }
+                                            // onRejectSuggestion={(editor) =>
+                                            //     aiSuggestions.rejectSuggestion(editor)
+                                            // }
+                                            // onTriggerSuggestion={(type, editor) =>
+                                            //     aiSuggestions.fetchSuggestion(type, editor)
+                                            // }
                                             />
                                         </ResizablePanel>
+                                        {isPreviewVisible && (
+                                            <>
+                                                <ResizableHandle />
+                                                <ResizablePanel defaultSize={50}>
+                                                    <WebContainerPreview
+                                                        templateData={templateData}
+                                                        instance={instance}
+                                                        writeFileSync={writeFileSync}
+                                                        isLoading={containerLoading}
+                                                        error={containerError}
+                                                        serverUrl={serverUrl!}
+                                                        forceResetup={false}
+                                                    />
+                                                </ResizablePanel>
+                                            </>
+                                        )}
 
-                                        
                                     </ResizablePanelGroup>
                                 </div>
 
