@@ -102,6 +102,28 @@ const TemplateFileTree = ({
   const handleAddRootFolder = ()=>{
     setIsNewFolderDialogOpen(true)
   }
+  const handleCreateFile = (filename: string, extension: string) => {
+    if(onAddFile && isRootFolder){
+      const newFile: TemplateFile = {
+        filename,
+        fileExtension: extension,
+        content: ""
+      }
+      onAddFile(newFile, "")
+    }
+    setIsNewFileDialogOpen(false);
+  }
+
+  const handleCreateFolder = (folserName: string)=>{
+    if(onAddFolder && isRootFolder){
+      const newFolder: TemplateFolder = {
+        folderName: folserName,
+        items: []
+      }
+      onAddFolder(newFolder, "")
+    }
+    setIsNewFolderDialogOpen(false);
+  }
 
   return (
     <Sidebar>
@@ -173,14 +195,12 @@ const TemplateFileTree = ({
       <NewFileDialog 
         isOpen = {isNewFileDialogOpen}
         onClose={()=>{setIsNewFileDialogOpen(false)}}
-        onCreateFile={(filename, extension) => {
-          
-        }}
+        onCreateFile={handleCreateFile}
       />
       <NewFolderDialog 
         isOpen = {isNewFolderDialogOpen}
         onClose={()=>{setIsNewFolderDialogOpen(false)}}
-        onCreateFolder={()=>{}}
+        onCreateFolder={handleCreateFolder}
       />
     </Sidebar>
   )
@@ -204,6 +224,7 @@ export function NewFileDialog({
   const [extension, setExtension] = React.useState("js")
 
   const handleSubmit = (e: React.FormEvent) => {
+    console.log("function is called")
     e.preventDefault()
     if (filename.trim()) {
       onCreateFile?.(filename.trim(), extension.trim() || "js")
@@ -347,6 +368,100 @@ export function NewFolderDialog({
   )
 }
 
+// interface RenameFileDialogProps {
+//   isOpen: boolean
+//   onClose: () => void
+//   file: TemplateFile
+//   onRenameFile?: (
+//     newFilename: string,
+//     newExtension: string
+//   ) => void
+// }
+
+// export function RenameFileDialog({
+//   isOpen,
+//   onClose,
+//   file,
+//   onRenameFile,
+// }: RenameFileDialogProps) {
+//   const [filename, setFilename] = React.useState(file.filename)
+//   const [extension, setExtension] = React.useState(file.fileExtension)
+
+//   const handleSubmit = (e: React.FormEvent) => {
+//     e.preventDefault()
+
+//     if (filename.trim()) {
+//       onRenameFile?.(
+//         filename.trim(),
+//         extension.trim()
+//       )
+
+//       onClose()
+//     }
+//   }
+
+//   return (
+//     <Dialog open={isOpen} onOpenChange={onClose}>
+//       <DialogContent>
+//         <DialogHeader>
+//           <DialogTitle>Rename File</DialogTitle>
+//           <DialogDescription>
+//             Change the name or extension of the file.
+//           </DialogDescription>
+//         </DialogHeader>
+
+//         <form onSubmit={handleSubmit}>
+//           <div className="grid gap-4 py-4">
+//             <div className="grid grid-cols-3 items-center gap-4">
+//               <Label htmlFor="rename-filename" className="text-right">
+//                 Filename
+//               </Label>
+
+//               <Input
+//                 id="rename-filename"
+//                 value={filename}
+//                 onChange={(e) => setFilename(e.target.value)}
+//                 className="col-span-2"
+//                 autoFocus
+//               />
+//             </div>
+
+//             <div className="grid grid-cols-3 items-center gap-4">
+//               <Label htmlFor="rename-extension" className="text-right">
+//                 Extension
+//               </Label>
+
+//               <Input
+//                 id="rename-extension"
+//                 value={extension}
+//                 onChange={(e) => setExtension(e.target.value)}
+//                 className="col-span-2"
+//               />
+//             </div>
+//           </div>
+
+//           <DialogFooter>
+//             <Button
+//               type="button"
+//               variant="outline"
+//               onClick={onClose}
+//             >
+//               Cancel
+//             </Button>
+
+//             <Button
+//               type="submit"
+//               disabled={!filename.trim()}
+//             >
+//               Rename
+//             </Button>
+//           </DialogFooter>
+//         </form>
+//       </DialogContent>
+//     </Dialog>
+//   )
+// }
+
 interface RenameFileDialogProps {
   isOpen: boolean
   onClose: () => void
@@ -363,8 +478,16 @@ export function RenameFileDialog({
   file,
   onRenameFile,
 }: RenameFileDialogProps) {
-  const [filename, setFilename] = React.useState(file.filename)
-  const [extension, setExtension] = React.useState(file.fileExtension)
+  const [filename, setFilename] = React.useState(file?.filename || "")
+  const [extension, setExtension] = React.useState(file?.fileExtension || "")
+
+  // Sync state whenever dialog opens with a new file's data
+  React.useEffect(() => {
+    if (file) {
+      setFilename(file.filename)
+      setExtension(file.fileExtension)
+    }
+  }, [file, isOpen])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
