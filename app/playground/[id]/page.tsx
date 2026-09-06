@@ -9,6 +9,7 @@ import { usePlayground } from "@/features/playground/hooks/usePlayground";
 import TemplateFileTree from "@/features/playground/components/template-file-tree";
 import { Button } from "@/components/ui/button";
 import WebContainerPreview from "@/features/webContainers/components/webcontainer-preview";
+import ToggleAI from "@/features/playground/components/toggle-ai";
 
 import {
     Tooltip,
@@ -21,17 +22,22 @@ import { Save, Bot, Settings, FileText, X, AlertCircle, FolderOpen } from "lucid
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TemplateFile, TemplateFolder } from "@/features/playground/types";
+import type { TemplateFile as JsonTemplateFile } from "@/features/playground/libs/path-to-json";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import PlaygroundEditor from "@/features/playground/components/playground-editor";
+import { PlaygroundEditor } from "@/features/playground/components/playground-editor";
 import { useWebContainer } from "@/features/webContainers/hooks/useWebContainer";
 import LoadingStep from "@/components/ui/loader";
 import { findFilePath } from "@/features/playground/libs";
+import { useAISuggestions } from "@/features/ai/hooks/useAISuggestion";
 
 
 const Page = () => {
     const { id } = useParams<{ id: string }>();
     const [isPreviewVisible, setIsPreviewVisible] = useState(true);
     const { playgroundData, templateData, isLoading, error, loadPlayground, saveTemplateData } = usePlayground(id);
+
+    const aiSuggestion = useAISuggestions();
+
     const {
         activeFileId,
         closeAllFiles,
@@ -188,11 +194,17 @@ const Page = () => {
                 const updatedTemplateData = JSON.parse(
                     JSON.stringify(latestTemplateData)
                 );
-                const updateFileContent = (items: any[]) =>
-                    items.map((item) => {
-                        if ("folderName" in item) {
-                            return { ...item, items: updateFileContent(item.items) };
+                const updateFileContent = (
+                    items: (TemplateFile | TemplateFolder)[]
+                ): (TemplateFile | TemplateFolder)[] => {
+                    return items.map((item) => {
+                        if ("folderName" in item && Array.isArray((item as TemplateFolder).items)) {
+                            return {
+                                ...item,
+                                items: updateFileContent((item as TemplateFolder).items),
+                            };
                         } else if (
+                            "filename" in item &&
                             item.filename === fileToSave.filename &&
                             item.fileExtension === fileToSave.fileExtension
                         ) {
@@ -200,6 +212,7 @@ const Page = () => {
                         }
                         return item;
                     });
+                };
                 updatedTemplateData.items = updateFileContent(
                     updatedTemplateData.items
                 );
@@ -213,9 +226,11 @@ const Page = () => {
                     }
                 }
 
-                // Use saveTemplateData to persist changes
-                const newTemplateData = await saveTemplateData(updatedTemplateData);
-                setTemplateData(newTemplateData || updatedTemplateData);
+                // Await the save operation
+                await saveTemplateData(updatedTemplateData);
+
+                // Set state using the updated local data
+                setTemplateData(updatedTemplateData);
 
                 // Update open files
                 const updatedOpenFiles = openFiles.map((f) =>
@@ -405,22 +420,11 @@ const Page = () => {
                                 </Tooltip>
 
                                 {/* TODO: TOGGLE-AI */}
-                                <Tooltip>
-                                    <TooltipTrigger render={
-                                        <Button
-                                            size={"sm"}
-                                            variant={"outline"}
-                                            onClick={() => { }}
-                                            disabled={!hasUnsavedChanges}
-                                        >
-                                            <Bot className="h-4 w-4" /> TOGGLE-AI
-                                        </Button>
-                                    }>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        TOGGLE-AI
-                                    </TooltipContent>
-                                </Tooltip>
+                                <ToggleAI
+                                    isEnabled={aiSuggestion.isEnabled}
+                                    onToggle={aiSuggestion.toggleEnabled}
+                                    suggestionLoading={aiSuggestion.isLoading}
+                                />
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger render={
@@ -515,18 +519,18 @@ const Page = () => {
                                                 onContentChange={(value) =>
                                                     activeFileId && updateFileContent(activeFileId, value)
                                                 }
-                                            // suggestion={aiSuggestions.suggestion}
-                                            // suggestionLoading={aiSuggestions.isLoading}
-                                            // suggestionPosition={aiSuggestions.position}
-                                            // onAcceptSuggestion={(editor, monaco) =>
-                                            //     aiSuggestions.acceptSuggestion(editor, monaco)
-                                            // }
-                                            // onRejectSuggestion={(editor) =>
-                                            //     aiSuggestions.rejectSuggestion(editor)
-                                            // }
-                                            // onTriggerSuggestion={(type, editor) =>
-                                            //     aiSuggestions.fetchSuggestion(type, editor)
-                                            // }
+                                                suggestion={aiSuggestion.suggestion}
+                                                suggestionLoading={aiSuggestion.isLoading}
+                                                suggestionPosition={aiSuggestion.position}
+                                                onAcceptSuggestion={(editor, monaco) =>
+                                                    aiSuggestion.acceptSuggestion(editor, monaco)
+                                                }
+                                                onRejectSuggestion={(editor) =>
+                                                    aiSuggestion.rejectSuggestion(editor)
+                                                }
+                                                onTriggerSuggestion={(type, editor) =>
+                                                    aiSuggestion.fetchSuggestion(type, editor)
+                                                }
                                             />
                                         </ResizablePanel>
                                         {isPreviewVisible && (

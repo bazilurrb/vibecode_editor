@@ -4,6 +4,9 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: { unoptimized: true },
+  experimental: {
+    useWasmBinary: true,
+  },
 };
 
 module.exports = nextConfig;
