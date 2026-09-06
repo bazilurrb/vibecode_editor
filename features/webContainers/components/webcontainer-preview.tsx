@@ -181,7 +181,7 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
           terminalRef.current.writeToTerminal("🚀 Starting development server...\r\n");
         }
         
-        const startProcess = await instance.spawn("npm", ["run", "start"]);
+        const startProcess = await instance.spawn("npm", ["run", "dev"]);
 
         // Listen for server ready event
         instance.on("server-ready", (port: number, url: string) => {
