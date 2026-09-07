@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 interface ChatMessage {
-  role: "user" | "assistant"
+  role: "user" | "assistant" | "system"
   content: string
 }
 
@@ -14,6 +14,10 @@ interface EnhancePromptRequest {
   }
 }
 
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || "http://localhost:11434"
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "codellama:latest"
+const TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120000 // 2 minutes timeout for local inference
+
 async function generateAIResponse(messages: ChatMessage[]) {
   const systemPrompt = `You are an expert AI coding assistant. You help developers with:
 - Code explanations and debugging
@@ -25,30 +29,27 @@ async function generateAIResponse(messages: ChatMessage[]) {
 Always provide clear, practical answers. When showing code, use proper formatting with language-specific syntax.
 Keep responses concise but comprehensive. Use code blocks with language specification when providing code examples.`
 
-  const fullMessages = [{ role: "system", content: systemPrompt }, ...messages]
-
-  const prompt = fullMessages.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n")
+  const fullMessages: ChatMessage[] = [{ role: "system", content: systemPrompt }, ...messages]
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 15000)
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
-    const response = await fetch("http://localhost:11434/api/generate", {
+    // Prefer /api/chat endpoint with structured messages
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "codellama:latest",
-        prompt,
+        model: OLLAMA_MODEL,
+        messages: fullMessages,
         stream: false,
         options: {
           temperature: 0.7,
           top_p: 0.9,
-          max_tokens: 1000,
-          num_predict: 1000,
+          num_predict: 1500,
           repeat_penalty: 1.1,
-          context_length: 4096,
         },
       }),
       signal: controller.signal,
@@ -57,20 +58,64 @@ Keep responses concise but comprehensive. Use code blocks with language specific
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Error from AI model API:", errorText)
-      throw new Error(`AI model API error: ${response.status} - ${errorText}`)
+      // Fallback to /api/generate if /api/chat returned non-200
+      const prompt = fullMessages.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n")
+      const fallbackResponse = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          prompt,
+          stream: false,
+          options: {
+            temperature: 0.7,
+            top_p: 0.9,
+            num_predict: 1500,
+            repeat_penalty: 1.1,
+          },
+        }),
+      })
+
+      if (!fallbackResponse.ok) {
+        const errorText = await fallbackResponse.text()
+        console.error("Error from AI model API:", errorText)
+        throw new Error(`AI model API error: ${fallbackResponse.status} - ${errorText}`)
+      }
+
+      const fallbackData = await fallbackResponse.json()
+      if (!fallbackData.response) {
+        throw new Error("No response from AI model")
+      }
+      return {
+        content: fallbackData.response.trim(),
+        model: fallbackData.model || OLLAMA_MODEL,
+        tokens: fallbackData.eval_count,
+      }
     }
 
     const data = await response.json()
-    if (!data.response) {
+    const content = data.message?.content || data.response
+    if (!content) {
       throw new Error("No response from AI model")
     }
-    return data.response.trim()
+    return {
+      content: content.trim(),
+      model: data.model || OLLAMA_MODEL,
+      tokens: data.eval_count,
+    }
   } catch (error) {
     clearTimeout(timeoutId)
     if ((error as Error).name === "AbortError") {
-      throw new Error("Request timeout: AI model took too long to respond")
+      throw new Error(`Request timeout: AI model took longer than ${TIMEOUT_MS / 1000}s to respond. If this is the first request, the model may still be loading into memory.`)
+    }
+    if (
+      (error as any)?.code === "ECONNREFUSED" ||
+      (error as Error)?.message?.includes("ECONNREFUSED") ||
+      (error as Error)?.message?.includes("fetch failed")
+    ) {
+      throw new Error(`Could not connect to Ollama at ${OLLAMA_BASE_URL}. Please ensure Ollama is running on port 11434.`)
     }
     console.error("AI generation error:", error)
     throw error
@@ -93,22 +138,28 @@ Enhanced prompt should:
 
 Return only the enhanced prompt, nothing else.`
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
   try {
-    const response = await fetch("http://localhost:11434/api/generate", {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "codellama:latest",
+        model: OLLAMA_MODEL,
         prompt: enhancementPrompt,
         stream: false,
         options: {
           temperature: 0.3,
-          max_tokens: 500,
+          num_predict: 500,
         },
       }),
+      signal: controller.signal,
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       throw new Error("Failed to enhance prompt")
@@ -117,6 +168,7 @@ Return only the enhanced prompt, nothing else.`
     const data = await response.json()
     return data.response?.trim() || request.prompt
   } catch (error) {
+    clearTimeout(timeoutId)
     console.error("Prompt enhancement error:", error)
     return request.prompt // Return original if enhancement fails
   }
@@ -155,12 +207,14 @@ export async function POST(req: NextRequest) {
 
     const aiResponse = await generateAIResponse(messages)
 
-    if (!aiResponse) {
+    if (!aiResponse || !aiResponse.content) {
       throw new Error("Empty response from AI model")
     }
 
     return NextResponse.json({
-      response: aiResponse,
+      response: aiResponse.content,
+      model: aiResponse.model,
+      tokens: aiResponse.tokens,
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
@@ -181,6 +235,8 @@ export async function GET() {
   return NextResponse.json({
     status: "AI Chat API is running",
     timestamp: new Date().toISOString(),
+    model: OLLAMA_MODEL,
+    ollamaBaseUrl: OLLAMA_BASE_URL,
     info: "Use POST method to send chat messages or enhance prompts",
   })
 }
