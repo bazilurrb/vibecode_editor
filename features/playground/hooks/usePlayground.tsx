@@ -26,28 +26,39 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPlayground = useCallback(async ()=>{
-    if (!id) return;
+  const loadPlayground = useCallback(async () => {
+    if (!id || id === "undefined" || id === "null") {
+      setError("Invalid playground ID");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       setIsLoading(true);
       setError(null);
 
       const data = await getPlaygroundById(id);
-    //   @ts-ignore
+      // @ts-ignore
       setPlaygroundData(data);
 
       const rawContent = data?.templateFiles?.[0]?.content;
       if (typeof rawContent === "string") {
-        const parsedContent = JSON.parse(rawContent);
-        setTemplateData(parsedContent);
-        toast.success("Playground loaded successfully");
-        return;
+        try {
+          const parsedContent = JSON.parse(rawContent);
+          setTemplateData(parsedContent);
+          toast.success("Playground loaded successfully");
+          return;
+        } catch (e) {
+          console.warn("Could not parse saved templateFiles content", e);
+        }
       } 
 
       // Load template from API if not in saved content
       const res = await fetch(`/api/template/${id}`);
-      if (!res.ok) throw new Error(`Failed to load template: ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to load template: ${res.status}`);
+      }
 
       const templateRes = await res.json();
       if (templateRes.templateJson && Array.isArray(templateRes.templateJson)) {
@@ -65,8 +76,9 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
       toast.success("Template loaded successfully");
     } catch (error) {
       console.error("Error loading playground:", error);
-      setError("Failed to load playground data");
-      toast.error("Failed to load playground data");
+      const message = error instanceof Error ? error.message : "Failed to load playground data";
+      setError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { WebContainer } from '@webcontainer/api';
 import { TemplateFolder } from '@/features/playground/libs/path-to-json';
 
 interface UseWebContainerProps {
-  templateData: TemplateFolder;
+  templateData?: TemplateFolder | null;
 }
 
 interface UseWebContainerReturn {
@@ -12,8 +12,21 @@ interface UseWebContainerReturn {
   error: string | null;
   instance: WebContainer | null;
   writeFileSync: (path: string, content: string) => Promise<void>;
-  destroy: () => void; // Added destroy function
+  destroy: () => void;
 }
+
+// Module-level singleton promise to survive React Strict Mode double-mounts
+let webContainerPromise: Promise<WebContainer> | null = null;
+
+export const getWebContainerInstance = async (): Promise<WebContainer> => {
+  if (!webContainerPromise) {
+    webContainerPromise = WebContainer.boot().catch((err) => {
+      webContainerPromise = null; // Reset on failure so subsequent attempts can retry
+      throw err;
+    });
+  }
+  return webContainerPromise;
+};
 
 export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebContainerReturn => {
   const [serverUrl, setServerUrl] = useState<string | null>(null);
@@ -21,37 +34,45 @@ export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebC
   const [error, setError] = useState<string | null>(null);
   const [instance, setInstance] = useState<WebContainer | null>(null);
 
-const instanceRef = useRef<WebContainer | null>(null);
+  useEffect(() => {
+    let mounted = true;
 
-useEffect(() => {
-  let mounted = true;
-
-  async function initializeWebContainer() {
-    try {
-      const webcontainerInstance = await WebContainer.boot();
-      if (!mounted) {
-        webcontainerInstance.teardown(); // handle the Strict Mode double-mount case
-        return;
-      }
-      instanceRef.current = webcontainerInstance;
-      setInstance(webcontainerInstance);
-      setIsLoading(false);
-    } catch (err) {
-      if (mounted) {
-        setError(err instanceof Error ? err.message : 'Failed to initialize WebContainer');
-        setIsLoading(false);
+    async function initializeWebContainer() {
+      try {
+        const webcontainerInstance = await getWebContainerInstance();
+        if (mounted) {
+          setInstance(webcontainerInstance);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize WebContainer');
+          setIsLoading(false);
+        }
       }
     }
-  }
 
-  initializeWebContainer();
+    initializeWebContainer();
 
-  return () => {
-    mounted = false;
-    instanceRef.current?.teardown();
-    instanceRef.current = null;
-  };
-}, []);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Listen for server-ready events on the instance
+  useEffect(() => {
+    if (!instance) return;
+
+    const unsubscribe = instance.on('server-ready', (port: number, url: string) => {
+      setServerUrl(url);
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [instance]);
 
   const writeFileSync = useCallback(async (path: string, content: string): Promise<void> => {
     if (!instance) {
@@ -76,10 +97,14 @@ useEffect(() => {
     }
   }, [instance]);
 
-  // Added destroy function
   const destroy = useCallback(() => {
     if (instance) {
-      instance.teardown();
+      try {
+        instance.teardown();
+      } catch (err) {
+        console.warn('Error during WebContainer teardown:', err);
+      }
+      webContainerPromise = null;
       setInstance(null);
       setServerUrl(null);
     }

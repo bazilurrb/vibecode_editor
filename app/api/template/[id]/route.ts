@@ -1,72 +1,75 @@
-import { readTemplateStructureFromJson, saveTemplateStructureToJson } from "@/features/playground/libs/path-to-json";
+import { scanTemplateDirectory } from "@/features/playground/libs/path-to-json";
 import { db } from "@/lib/db";
 import { templatePaths } from "@/lib/template";
 import path from "path";
-import fs from "fs/promises";
 import { NextRequest } from "next/server";
-
-
-// Helper function to ensure valid JSON
-function validateJsonStructure(data: unknown): boolean {
-  try {
-    JSON.parse(JSON.stringify(data)); // Ensures it's serializable
-    return true;
-  } catch (error) {
-    console.error("Invalid JSON structure:", error);
-    return false;
-  }
-}
-
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const param = await params;
-  const id = param.id;
+  const id = param?.id;
 
-  if (!id) {
-    return Response.json({ error: "Missing playground ID" }, { status: 400 });
+  if (!id || id === "undefined" || id === "null") {
+    return Response.json({ error: "Missing or invalid playground ID" }, { status: 400 });
   }
 
-  const playground = await db.playground.findUnique({
-    where: { id },
+  let templateKey: string | undefined;
+
+  // 1. Check if ID matches a playground in database
+  try {
+    const playground = await db.playground.findUnique({
+      where: { id },
     });
-
-    if (!playground) {
-    return Response.json({ error: "Playground not found" }, { status: 404 });
-  }
-  
-  const templateKey = playground.template as keyof typeof templatePaths;
-  const templatePath = templatePaths[templateKey];
-
-    if (!templatePath) {
-    return Response.json({ error: "Invalid template" }, { status: 404 });
-  }
-
-    try {
-    const inputPath = path.join(process.cwd(), templatePath);
-    const outputFile = path.join(process.cwd(), `output/${templateKey}.json`);
-
-    console.log("Input Path:", inputPath);
-    console.log("Output Path:", outputFile);
-
-    // Save and read the template structure
-    await saveTemplateStructureToJson(inputPath, outputFile);
-    const result = await readTemplateStructureFromJson(outputFile);
-
-    // Validate the JSON structure before saving
-    if (!validateJsonStructure(result.items)) {
-      return Response.json({ error: "Invalid JSON structure" }, { status: 500 });
+    if (playground?.template) {
+      templateKey = playground.template;
     }
+  } catch (error) {
+    console.warn("Database query error for playground id:", id, error);
+  }
 
+  // 2. If not found in DB by ID, check if ID is itself a valid template key (e.g. REACT, EXPRESS, etc.)
+  if (!templateKey) {
+    const normalizedId = id.toUpperCase();
+    if (templatePaths[normalizedId] || templatePaths[id]) {
+      templateKey = templatePaths[normalizedId] ? normalizedId : id;
+    }
+  }
 
+  // 3. Check case-insensitive match among all template keys
+  if (!templateKey) {
+    const found = Object.keys(templatePaths).find(k => k.toLowerCase() === id.toLowerCase());
+    if (found) {
+      templateKey = found;
+    }
+  }
 
-    await fs.unlink(outputFile);
+  // 4. If still not found, return 404
+  if (!templateKey) {
+    return Response.json({ error: `Playground '${id}' not found` }, { status: 404 });
+  }
+
+  const templatePath = templatePaths[templateKey] || templatePaths[templateKey.toUpperCase()] || templatePaths[templateKey.toLowerCase()];
+
+  if (!templatePath) {
+    return Response.json({ error: `Invalid template: ${templateKey}` }, { status: 404 });
+  }
+
+  try {
+    const inputPath = path.resolve(process.cwd(), templatePath);
+    console.log(`[API /template/${id}] Scanning template path:`, inputPath);
+
+    // Direct in-memory scan (no disk writing/unlinking required)
+    const result = await scanTemplateDirectory(inputPath);
+
+    if (!result || !result.items) {
+      return Response.json({ error: "Failed to read template items" }, { status: 500 });
+    }
 
     return Response.json({ success: true, templateJson: result }, { status: 200 });
   } catch (error) {
     console.error("Error generating template JSON:", error);
-    return Response.json({ error: "Failed to generate template" }, { status: 500 });
+    return Response.json({ error: "Failed to generate template: " + (error instanceof Error ? error.message : String(error)) }, { status: 500 });
   }
 }
