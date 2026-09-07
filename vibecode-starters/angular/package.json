@@ -2,6 +2,7 @@
   "name": "angular-starter",
   "private": true,
   "scripts": {
+    "dev": "ng serve",
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build"
