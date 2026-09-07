@@ -781,12 +781,16 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
           },
         ]);
       } else {
+        const errorData = await response.json().catch(() => null);
+        const errorMessage =
+          errorData?.details ||
+          errorData?.error ||
+          "Sorry, I encountered an error while processing your request. Please try again.";
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content:
-              "Sorry, I encountered an error while processing your request. Please try again.",
+            content: errorMessage,
             timestamp: new Date(),
             id: Date.now().toString(),
           },
@@ -914,7 +918,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
             <div className="flex items-center justify-between p-6">
               <div className="flex items-center gap-3">
                 <div className="relative w-10 h-10 border rounded-full flex flex-col justify-center items-center">
-                  <Image src={"/logo.svg"} alt="Logo" width={28} height={28} />
+                  <Image src={"/logo.svg"} alt="Logo" width={28} height={28} style={{ width: "auto", height: "auto" }} />
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-zinc-100">
