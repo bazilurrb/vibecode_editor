@@ -2,8 +2,16 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import DashboardSidebar from '@/features/dashboard/components/dashboard-sidebar'
 import React from 'react'
 import { getAllPlaygroundForUser } from '@/features/dashboard/actions'
+import { currentUser } from '@/features/auth/actions'
+import { redirect } from 'next/navigation'
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({children}: {children:React.ReactNode}){
+    const user = await currentUser();
+    if (!user) {
+        redirect("/auth/sign-in");
+    }
 
     const playgroundData = await getAllPlaygroundForUser();
 

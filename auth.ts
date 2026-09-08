@@ -8,7 +8,22 @@ import { getAccountByUserId, getUserById } from "@/features/auth/actions";
  
 
  
+// Auto-correct AUTH_URL if running on Vercel with a localhost env var
+if (process.env.VERCEL && process.env.AUTH_URL?.includes("localhost")) {
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    "vibecode-editor-iota.vercel.app";
+  process.env.AUTH_URL = `https://${vercelHost}`;
+  process.env.NEXTAUTH_URL = `https://${vercelHost}`;
+}
+
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  ...authConfig,
+  trustHost: true,
+  secret: process.env.AUTH_SECRET,
+  adapter: PrismaAdapter(db),
+  session: { strategy: "jwt" },
   callbacks: {
     /**
      * Handle user creation and account linking after a successful sign-in
@@ -47,7 +62,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           },
         });
 
-        if (!newUser) return false; // Return false if user creation fails
+        if (!newUser) return false;
+        user.id = newUser.id;
       } else {
         // Link the account if user exists
         const existingAccount = await db.account.findUnique({
@@ -78,18 +94,31 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
             },
           });
         }
+        user.id = existingUser.id;
       }
 
       return true;
     },
 
     async jwt({ token, user, account }) {
-      if(!token.sub) return token;
-      const existingUser = await getUserById(token.sub)
+      // On initial sign in, resolve and link MongoDB User ID to token.sub
+      if (user && user.email) {
+        const dbUser = await db.user.findUnique({
+          where: { email: user.email },
+        });
+        if (dbUser) {
+          token.sub = dbUser.id;
+          token.role = dbUser.role;
+          token.name = dbUser.name;
+          token.email = dbUser.email;
+          return token;
+        }
+      }
 
-      if(!existingUser) return token;
+      if (!token.sub) return token;
+      const existingUser = await getUserById(token.sub);
 
-      const exisitingAccount = await getAccountByUserId(existingUser.id);
+      if (!existingUser) return token;
 
       token.name = existingUser.name;
       token.email = existingUser.email;
@@ -100,20 +129,26 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 
     async session({ session, token }) {
       // Attach the user ID from the token to the session
-    if(token.sub  && session.user){
-      session.user.id = token.sub
-    } 
+      if (token.sub && session.user) {
+        session.user.id = token.sub;
+      } 
 
-    if(token.sub && session.user){
-      session.user.role = token.role
-    }
+      if (token.role && session.user) {
+        session.user.role = token.role as any;
+      }
 
-    return session;
+      return session;
+    },
+
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allows callback URLs on the same origin
+      try {
+        const parsedUrl = new URL(url);
+        if (parsedUrl.origin === baseUrl) return url;
+      } catch {}
+      return baseUrl;
     },
   },
-  
-  secret: process.env.AUTH_SECRET,
-  adapter: PrismaAdapter(db),
-  session: { strategy: "jwt" },
-  ...authConfig,
 })
