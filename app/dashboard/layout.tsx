@@ -1,4 +1,4 @@
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import DashboardSidebar from '@/features/dashboard/components/dashboard-sidebar'
 import React from 'react'
 import { getAllPlaygroundForUser } from '@/features/dashboard/actions'
@@ -25,13 +25,10 @@ export default async function DashboardLayout({children}: {children:React.ReactN
 
     return (
         <SidebarProvider>
-            <div className='flex min-h-screen w-full overflow-x-hidden'>
-                {/* TODO: DASHBOARDSIDEBAR implement */}
-                <DashboardSidebar initialPlaygroundData={formattedPlaygroundData}/>
-                <main className='flex-1'>
-                    {children}
-                </main>
-            </div>
+            <DashboardSidebar initialPlaygroundData={formattedPlaygroundData}/>
+            <SidebarInset className="min-w-0 flex-1 overflow-x-hidden">
+                {children}
+            </SidebarInset>
         </SidebarProvider>
     )
 }
