@@ -13,6 +13,9 @@ export const createPlayground = async(data:{
     const {template, title, description} = data;
 
     const user = await currentUser();
+    if (!user || !user.id) {
+        throw new Error("Unauthorized: You must be logged in to create a playground");
+    }
 
     try{
         const playground = await db.playground.create({
@@ -20,9 +23,10 @@ export const createPlayground = async(data:{
                 title,
                 description,
                 template,
-                userId: user?.id!
+                userId: user.id
             }
         });
+        revalidatePath("/dashboard");
         return playground;
     } catch(error){
         console.error(error);
@@ -33,54 +37,83 @@ export const createPlayground = async(data:{
 export const getAllPlaygroundForUser = async()=>{
     const user = await currentUser();
 
+    if (!user || !user.id) {
+        return [];
+    }
+
     try{
-        const  playground = await db.playground.findMany({
+        const playground = await db.playground.findMany({
             where:{
-                userId:user?.id
+                userId: user.id
             },
             include:{
                 user:true,
                 Starmark:{
                     where:{
-                        userId:user?.id
+                        userId: user.id
                     },
                     select:{
                         isMarked: true
                     }
                 }
+            },
+            orderBy: {
+                createdAt: "desc"
             }
         })
 
         return playground;
     } catch(error){
         console.error(error);
-        return null;
+        return [];
     }
 }
 
 export const deleteProjectById = async(id:string)=>{
+    const user = await currentUser();
+    if (!user || !user.id) {
+        throw new Error("Unauthorized");
+    }
+
     try{
-        await db.playground.delete({
-            where:{id}
+        await db.playground.deleteMany({
+            where:{
+                id,
+                userId: user.id
+            }
         })
-    revalidatePath("/dashboard");
+        revalidatePath("/dashboard");
     } catch(error){
-        console.log(error);
+        console.error(error);
     }
 }
 
 export const editProjectById = async (id:string, data:{title:string, description:string})=>{
+    const user = await currentUser();
+    if (!user || !user.id) {
+        throw new Error("Unauthorized");
+    }
+
     try{
-        await db.playground.update({
-            where:{id},
-            data:data
+        await db.playground.updateMany({
+            where:{
+                id,
+                userId: user.id
+            },
+            data: data
         })
+        revalidatePath("/dashboard");
     } catch(error) {
         console.error(error);
     }
 }
 
 export const duplicateProjectById = async(id:string)=>{
+    const user = await currentUser();
+    if (!user || !user.id) {
+        throw new Error("Unauthorized");
+    }
+
     try{
         const originalPlayground = await db.playground.findUnique({
             where:{id}
@@ -95,7 +128,7 @@ export const duplicateProjectById = async(id:string)=>{
                 title:`${originalPlayground.title} (Copy)`,
                 description:originalPlayground.description,
                 template:originalPlayground.template,
-                userId:originalPlayground.userId
+                userId: user.id
             }
         })
 

@@ -16,12 +16,12 @@ import { FcGoogle } from "react-icons/fc";
 
 async function handleGoogleSignIn(){
 "use server"
-await signIn("google")
+await signIn("google", { redirectTo: "/dashboard" })
 }
 
 async function handleGithubSignIn(){
 "use server"
-await signIn("github")
+await signIn("github", { redirectTo: "/dashboard" })
 }
 
 
@@ -29,21 +29,21 @@ const SignInFormClient = () => {
   return (
     <Card className = "w-full max-w-md">
         <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
-            <CardDescription className="text-center">Choose your preferred sign-in method</CardDescription>
+            <CardTitle className="text-2xl font-bold text-center">Welcome to VibeCode</CardTitle>
+            <CardDescription className="text-center">Sign in or create an account to start coding</CardDescription>
         </CardHeader>
 
         <CardContent className="grid gap-4">
             <form action={handleGoogleSignIn}>
             <Button type="submit" variant={"outline"} className="w-full">
                 <FcGoogle className="mr-2 h-4 w-4" />
-                <span>Sign in with google</span>
+                <span>Continue with Google</span>
             </Button>
             </form>
             <form action={handleGithubSignIn}>
             <Button type="submit" variant={"outline"} className="w-full">
                 <FaGithub className="mr-2 h-4 w-4" />
-                <span>Sign in with github</span>
+                <span>Continue with GitHub</span>
             </Button>
             </form>
       </CardContent>

@@ -5,7 +5,16 @@ import AddRepoButton from '@/features/dashboard/components/add-repo-button'
 import { deleteProjectById, duplicateProjectById, editProjectById, getAllPlaygroundForUser } from '@/features/dashboard/actions'
 import ProjectTable from '@/features/dashboard/components/project-table'
 
+import { currentUser } from '@/features/auth/actions'
+import { redirect } from 'next/navigation'
+
+export const dynamic = "force-dynamic";
+
 const Page = async () => {
+    const user = await currentUser();
+    if (!user) {
+        redirect("/auth/sign-in");
+    }
     const playgrounds = await getAllPlaygroundForUser();
   return (
     <div className='flex flex-col justify-start items-stretch min-h-screen w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10'>
