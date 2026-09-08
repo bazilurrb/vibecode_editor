@@ -54,6 +54,8 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
   const devServerProcessRef = useRef<any>(null);
   const isSetupInProgressRef = useRef(false);
   const isSetupCompleteRef = useRef(false);
+  const hasFailedSetupRef = useRef(false);
+  const projectWorkDirRef = useRef<string>("");
 
   // Sync propServerUrl if provided
   useEffect(() => {
@@ -82,19 +84,58 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
     };
   }, [instance]);
 
+  // Helper to find runnable package.json directory
+  const findRunnableProjectDir = async (wc: WebContainer): Promise<{ found: boolean; dir: string }> => {
+    // 1. Check root
+    try {
+      await wc.fs.readFile("package.json", "utf-8");
+      return { found: true, dir: "" };
+    } catch {}
+
+    // 2. Check common frontend / app subdirectories
+    const preferredSubdirs = ["client", "frontend", "web", "ui", "app", "src", "server", "backend", "api"];
+    for (const subdir of preferredSubdirs) {
+      try {
+        await wc.fs.readFile(`${subdir}/package.json`, "utf-8");
+        return { found: true, dir: subdir };
+      } catch {}
+    }
+
+    // 3. Check any 1st-level directory with package.json
+    try {
+      const entries = await wc.fs.readdir(".", { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          try {
+            await wc.fs.readFile(`${entry.name}/package.json`, "utf-8");
+            return { found: true, dir: entry.name };
+          } catch {}
+        }
+      }
+    } catch {}
+
+    return { found: false, dir: "" };
+  };
+
   // Start development server
-  const startDevServer = useCallback(async () => {
+  const startDevServer = useCallback(async (workDirOverride?: string) => {
     if (!instance) return;
+
+    const workDir = workDirOverride !== undefined ? workDirOverride : projectWorkDirRef.current;
+    const pkgPath = workDir ? `${workDir}/package.json` : "package.json";
 
     try {
       // Inspect package.json for dev / start / serve script
       let commandArgs = ["run", "dev"];
       try {
-        const pkgRaw = await instance.fs.readFile("package.json", "utf-8");
+        const pkgRaw = await instance.fs.readFile(pkgPath, "utf-8");
         const pkg = JSON.parse(pkgRaw);
         if (pkg.scripts) {
           if (pkg.scripts.dev) {
             commandArgs = ["run", "dev"];
+            if (typeof pkg.scripts.dev === "string" && pkg.scripts.dev.includes("vite")) {
+              commandArgs = ["run", "dev", "--", "--host"];
+            }
           } else if (pkg.scripts.start) {
             commandArgs = ["run", "start"];
           } else if (pkg.scripts.serve) {
@@ -102,12 +143,15 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
           }
         }
       } catch (e) {
-        console.warn("Could not read package.json scripts, using default 'run dev'", e);
+        console.warn(`Could not read ${pkgPath} scripts, using default 'run dev'`, e);
       }
 
-      terminalRef.current?.writeToTerminal(`\r\n🚀 Spawning development server (npm ${commandArgs.join(" ")})...\r\n`);
+      terminalRef.current?.writeToTerminal(
+        `\r\n🚀 Spawning development server (npm ${commandArgs.join(" ")})${workDir ? ` in /${workDir}` : ""}...\r\n`
+      );
 
-      const process = await instance.spawn("npm", commandArgs);
+      const spawnOpts = workDir ? { cwd: workDir } : undefined;
+      const process = await instance.spawn("npm", commandArgs, spawnOpts);
       devServerProcessRef.current = process;
       setIsServerRunning(true);
 
@@ -173,6 +217,7 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
       isSetupInProgressRef.current = true;
       setIsSetupInProgress(true);
       setSetupError(null);
+      hasFailedSetupRef.current = false;
 
       // Step 1: Transform template data
       setCurrentStep(1);
@@ -186,11 +231,34 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
       await instance.mount(files);
       terminalRef.current?.writeToTerminal("✅ Files mounted successfully.\r\n");
 
+      // Check for runnable package.json
+      const { found: hasPackageJson, dir: targetWorkDir } = await findRunnableProjectDir(instance);
+      projectWorkDirRef.current = targetWorkDir;
+
+      if (!hasPackageJson) {
+        terminalRef.current?.writeToTerminal(
+          "\r\nℹ️ No package.json found in this repository.\r\nDependency installation and dev server were skipped.\r\nYou can freely view and edit all project files in the editor.\r\n"
+        );
+        setCurrentStep(4);
+        isSetupCompleteRef.current = true;
+        setIsSetupComplete(true);
+        setIsSetupInProgress(false);
+        isSetupInProgressRef.current = false;
+        return;
+      }
+
+      if (targetWorkDir) {
+        terminalRef.current?.writeToTerminal(
+          `\r\n📁 Detected runnable Node.js application in /${targetWorkDir}\r\n`
+        );
+      }
+
       // Step 3: Install dependencies
       setCurrentStep(3);
+      const nodeModulesPath = targetWorkDir ? `${targetWorkDir}/node_modules` : "node_modules";
       let hasNodeModules = false;
       try {
-        const entries = await instance.fs.readdir("node_modules");
+        const entries = await instance.fs.readdir(nodeModulesPath);
         if (entries && entries.length > 0) {
           hasNodeModules = true;
         }
@@ -199,8 +267,11 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
       }
 
       if (!hasNodeModules) {
-        terminalRef.current?.writeToTerminal("📦 Installing dependencies (npm install)...\r\n");
-        const installProcess = await instance.spawn("npm", ["install"]);
+        terminalRef.current?.writeToTerminal(
+          `📦 Installing dependencies (npm install)${targetWorkDir ? ` in /${targetWorkDir}` : ""}...\r\n`
+        );
+        const spawnOpts = targetWorkDir ? { cwd: targetWorkDir } : undefined;
+        const installProcess = await instance.spawn("npm", ["install"], spawnOpts);
         
         installProcess.output.pipeTo(
           new WritableStream({
@@ -221,7 +292,7 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
 
       // Step 4: Start development server
       setCurrentStep(4);
-      await startDevServer();
+      await startDevServer(targetWorkDir);
 
       isSetupCompleteRef.current = true;
       setIsSetupComplete(true);
@@ -235,12 +306,14 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
       setSetupError(errorMessage);
       setIsSetupInProgress(false);
       isSetupInProgressRef.current = false;
+      hasFailedSetupRef.current = true;
     }
   }, [instance, templateData, startDevServer]);
 
   // Handle forceResetup
   useEffect(() => {
     if (forceResetup) {
+      hasFailedSetupRef.current = false;
       isSetupCompleteRef.current = false;
       isSetupInProgressRef.current = false;
       setIsSetupComplete(false);
@@ -256,11 +329,11 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
   // Run setup when instance and template data are ready
   useEffect(() => {
     if (instance && templateData && templateData.items && templateData.items.length > 0) {
-      if (!isSetupComplete && !isSetupInProgress) {
+      if (!isSetupComplete && !isSetupInProgress && !setupError && !hasFailedSetupRef.current) {
         setupContainer();
       }
     }
-  }, [instance, templateData, isSetupComplete, isSetupInProgress, setupContainer]);
+  }, [instance, templateData, isSetupComplete, isSetupInProgress, setupError, setupContainer]);
 
   if (isLoading) {
     return (
@@ -370,6 +443,7 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={() => {
+                      hasFailedSetupRef.current = false;
                       setSetupError(null);
                       isSetupCompleteRef.current = false;
                       isSetupInProgressRef.current = false;
@@ -431,7 +505,7 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={startDevServer}
+                    onClick={() => startDevServer()}
                     className="h-7 px-2 text-xs text-emerald-600 hover:text-emerald-700"
                     title="Start Server"
                   >

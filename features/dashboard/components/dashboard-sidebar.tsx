@@ -54,7 +54,7 @@ const DashboardSidebar = ({initialPlaygroundData}: {initialPlaygroundData: Playg
                 </SidebarMenu>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton render={<Link href="#" />} isActive={pathname === "/dashboard"} tooltip="Home">
+                        <SidebarMenuButton render={<Link href="/dashboard" />} isActive={pathname === "/dashboard"} tooltip="Dashboard">
                                 <LayoutDashboard className='h-4 w-4' />
                                 <span>Dashboard</span>
                         </SidebarMenuButton>

@@ -175,30 +175,30 @@ export default function ProjectTable({
 
   return (
     <>
-      <div className="border rounded-lg overflow-hidden">
+      <div className="w-full border rounded-lg overflow-hidden bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Project</TableHead>
-              <TableHead>Template</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead className="w-[50px]">Actions</TableHead>
+              <TableHead className="w-[40%] min-w-[180px]">Project</TableHead>
+              <TableHead className="w-[15%] min-w-[100px]">Template</TableHead>
+              <TableHead className="w-[15%] min-w-[110px]">Created</TableHead>
+              <TableHead className="w-[20%] min-w-[130px]">User</TableHead>
+              <TableHead className="w-[10%] min-w-[60px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {projects.map((project) => (
               <TableRow key={project.id}>
-                <TableCell className="font-medium">
-                  <div className="flex flex-col">
+                <TableCell className="font-medium max-w-[260px] sm:max-w-[340px] md:max-w-md">
+                  <div className="flex flex-col min-w-0">
                     <Link
                       href={`/playground/${project.id}`}
-                      className="hover:underline"
+                      className="hover:underline truncate block"
                     >
-                      <span className="font-semibold">{project.title}</span>
+                      <span className="font-semibold truncate block">{project.title}</span>
                     </Link>
-                    <span className="text-sm text-gray-500 line-clamp-1">
-                      {project.description}
+                    <span className="text-sm text-muted-foreground truncate block">
+                      {project.description || "No description"}
                     </span>
                   </div>
                 </TableCell>
@@ -210,21 +210,24 @@ export default function ProjectTable({
                     {project.template}
                   </Badge>
                 </TableCell>
+                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                  {project.createdAt ? format(new Date(project.createdAt), "MMM dd, yyyy") : "—"}
+                </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full overflow-hidden">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
                       <Image
-                        src={project.user.image || "/placeholder.svg"}
-                        alt={project.user.name}
+                        src={project.user?.image || "/placeholder.svg"}
+                        alt={project.user?.name || "User"}
                         width={32}
                         height={32}
                         className="object-cover"
                       />
                     </div>
-                    <span className="text-sm">{project.user.name}</span>
+                    <span className="text-sm truncate">{project.user?.name || "Anonymous"}</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
@@ -235,12 +238,6 @@ export default function ProjectTable({
                       }
                     />
                     <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem
-                      // render={
-                      // <MarkedToggleButton markedForRevision={project.Starmark[0]?.isMarked} id={project.id}
-                      // />
-                      // }
-                      />
                       <DropdownMenuItem
                         render={
                           <Link
