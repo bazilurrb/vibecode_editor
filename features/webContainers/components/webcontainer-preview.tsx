@@ -48,6 +48,7 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
   const [isSetupInProgress, setIsSetupInProgress] = useState(false);
   const [isServerRunning, setIsServerRunning] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
+  const [iframeError, setIframeError] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
   
   const terminalRef = useRef<TerminalRef | null>(null);
@@ -61,8 +62,16 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
   useEffect(() => {
     if (propServerUrl && !previewUrl) {
       setPreviewUrl(propServerUrl);
+      setIframeError(false);
     }
   }, [propServerUrl, previewUrl]);
+
+  // Reset iframe error when previewUrl changes (e.g. server restarted)
+  useEffect(() => {
+    if (previewUrl) {
+      setIframeError(false);
+    }
+  }, [previewUrl]);
 
   // Listen for server-ready events from WebContainer
   useEffect(() => {
@@ -548,13 +557,37 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
 
             {/* Iframe Preview */}
             <div className="flex-1 relative bg-white min-h-0">
-              <iframe
-                key={iframeKey}
-                src={previewUrl}
-                allow="cross-origin-isolated; autoplay; camera; microphone; geolocation"
-                className="w-full h-full border-none"
-                title="WebContainer Preview"
-              />
+              {iframeError ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background text-center p-6">
+                  <div className="flex flex-col items-center gap-2">
+                    <XCircle className="w-10 h-10 text-destructive" />
+                    <p className="text-sm font-medium text-foreground">Preview couldn't load</p>
+                    <p className="text-xs text-muted-foreground max-w-xs">
+                      The dev server may still be starting up, or an error occurred. Try reloading the preview.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIframeError(false);
+                      setIframeKey((k) => k + 1);
+                    }}
+                    className="h-7 text-xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Reload Preview
+                  </Button>
+                </div>
+              ) : (
+                <iframe
+                  key={iframeKey}
+                  src={previewUrl}
+                  allow="cross-origin-isolated; autoplay; camera; microphone; geolocation"
+                  className="w-full h-full border-none"
+                  title="WebContainer Preview"
+                  onError={() => setIframeError(true)}
+                />
+              )}
             </div>
           </div>
         )}
