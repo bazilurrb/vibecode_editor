@@ -9,8 +9,9 @@ import {
 } from "@/routes";
 import authConfig from "./auth.config";
 
-// Auto-correct AUTH_URL if running on Vercel with a localhost env var
-if (process.env.VERCEL && process.env.AUTH_URL?.includes("localhost")) {
+// Auto-correct AUTH_URL if running in production/Vercel with missing or localhost env var
+const isProdOrVercel = !!process.env.VERCEL || process.env.NODE_ENV === "production";
+if (isProdOrVercel && (!process.env.AUTH_URL || process.env.AUTH_URL.includes("localhost"))) {
   const vercelHost =
     process.env.VERCEL_PROJECT_PRODUCTION_URL ||
     process.env.VERCEL_URL ||
